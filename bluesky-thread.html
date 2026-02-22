@@ -56,19 +56,12 @@
       margin-bottom: 1em;
       flex-wrap: wrap;
     }
-    .ai-controls select,
-    .ai-controls input[type="password"] {
+    .ai-controls select {
       padding: 0.5em;
       font-size: 0.9rem;
       border: 1px solid #ccc;
       border-radius: 4px;
-    }
-    .ai-controls select {
       width: 120px;
-    }
-    .ai-controls input[type="password"] {
-      flex: 1;
-      min-width: 150px;
     }
     .ai-response {
       white-space: pre-wrap;
@@ -511,7 +504,6 @@
           <option value="anthropic">Anthropic</option>
           <option value="google">Google</option>
         </select>
-        <input type="password" id="apiKey" placeholder="Enter API Key" />
       </div>
       <div class="ai-selected-post" id="selectedPostPreview" style="display: none;">
         <div class="selected-author"></div>
@@ -534,7 +526,6 @@
       const postUrl = document.getElementById('postUrl');
       const aiPanel = document.getElementById('aiPanel');
       const aiProvider = document.getElementById('aiProvider');
-      const apiKeyInput = document.getElementById('apiKey');
       const aiResponse = document.getElementById('aiResponse');
       const selectedPostPreview = document.getElementById('selectedPostPreview');
       let lastThread = null;
@@ -543,20 +534,12 @@
       let hideOtherReplies = false;
       let selectedPostUri = null;
 
-      // Load saved API keys from localStorage
-      const savedKeys = JSON.parse(localStorage.getItem('aiApiKeys') || '{}');
+      // Restore last-used provider from localStorage
       const savedProvider = localStorage.getItem('aiProvider');
       if (savedProvider) aiProvider.value = savedProvider;
-      if (savedKeys[aiProvider.value]) apiKeyInput.value = savedKeys[aiProvider.value];
 
       aiProvider.addEventListener('change', () => {
         localStorage.setItem('aiProvider', aiProvider.value);
-        apiKeyInput.value = savedKeys[aiProvider.value] || '';
-      });
-
-      apiKeyInput.addEventListener('change', () => {
-        savedKeys[aiProvider.value] = apiKeyInput.value;
-        localStorage.setItem('aiApiKeys', JSON.stringify(savedKeys));
       });
 
       // Extract images from a post's embed (including quoted posts)
@@ -820,9 +803,17 @@
       }
 
       async function explainPost(postUri, postAuthor, postText) {
-        const apiKey = apiKeyInput.value.trim();
+        const provider = aiProvider.value;
+        const storageKey = `${provider}_api_key`;
+        let apiKey = localStorage.getItem(storageKey);
         if (!apiKey) {
-          aiResponse.textContent = 'Please enter an API key first.';
+          apiKey = prompt(`Enter your ${provider} API key:`);
+          if (apiKey) {
+            localStorage.setItem(storageKey, apiKey);
+          }
+        }
+        if (!apiKey) {
+          aiResponse.textContent = 'No API key provided.';
           aiResponse.className = 'ai-response error';
           return;
         }
@@ -881,7 +872,6 @@ Please explain what this means so it's understandable to someone who is not well
 
         try {
           let result;
-          const provider = aiProvider.value;
 
           if (provider === 'openai') {
             result = await callOpenAI(apiKey, systemPrompt, userPrompt, threadImages);
