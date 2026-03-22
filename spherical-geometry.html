@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spherical Geometry Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --void: #050810;
+    --deep: #0a0f1e;
+    --mid: #0f1829;
+    --panel: rgba(10, 18, 40, 0.88);
+    --border: rgba(100, 160, 255, 0.15);
+    --accent: #4a9eff;
+    --gold: #e8c97a;
+    --rose: #ff6b8a;
+    --mint: #5effc8;
+    --text: #c8d8f0;
+    --dim: #607090;
+  }
+
+  body {
+    background: var(--void);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Starfield */
+  #stars {
+    position: fixed; inset: 0; z-index: 0;
+    background: radial-gradient(ellipse at 30% 20%, rgba(20,40,80,0.4) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 80%, rgba(40,20,60,0.3) 0%, transparent 50%),
+                var(--void);
+  }
+  #stars::before, #stars::after {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 25% 45%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1.5px 1.5px at 40% 10%, rgba(255,255,255,0.7) 0%, transparent 100%),
+      radial-gradient(1px 1px at 55% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 70% 25%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1.5px 1.5px at 85% 55%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 15% 80%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 60% 90%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 90% 10%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 35% 60%, rgba(200,220,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 75% 40%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 5% 50%, rgba(255,255,255,0.3) 0%, transparent 100%);
+  }
+
+  header {
+    position: relative; z-index: 10;
+    padding: 16px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    backdrop-filter: blur(12px);
+    display: flex; align-items: baseline; gap: 16px;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 300;
+    letter-spacing: 0.05em;
+    color: #e8f0ff;
+  }
+  header span {
+    color: var(--dim); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .layout {
+    position: relative; z-index: 1;
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  /* LEFT: Canvas */
+  #canvas-wrap {
+    flex: 1; position: relative;
+    cursor: grab;
+  }
+  #canvas-wrap:active { cursor: grabbing; }
+  #canvas-wrap canvas { display: block; }
+
+  /* Drag hint */
+  .drag-hint {
+    position: absolute; bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    color: var(--dim); font-size: 11px; letter-spacing: 0.1em;
+    pointer-events: none;
+    animation: fadePulse 2s ease-in-out infinite;
+  }
+  @keyframes fadePulse { 0%,100%{opacity:.4} 50%{opacity:.9} }
+
+  /* RIGHT: Panel */
+  #panel {
+    width: 320px; flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    backdrop-filter: blur(16px);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .section {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 20px;
+  }
+  .section-label {
+    font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 14px;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 2px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 6px; padding: 3px;
+    margin-bottom: 14px;
+  }
+  .tab {
+    flex: 1; padding: 7px 4px; text-align: center;
+    border-radius: 4px; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.05em;
+    color: var(--dim); border: none; background: transparent;
+    transition: all 0.2s;
+  }
+  .tab.active {
+    background: rgba(74,158,255,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(74,158,255,0.25);
+  }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* Legend items */
+  .legend { display: flex; flex-direction: column; gap: 8px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; padding: 7px 10px; border-radius: 5px;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+  }
+  .legend-item:hover { background: rgba(255,255,255,0.04); }
+  .legend-item.active { background: rgba(74,158,255,0.08); border-color: rgba(74,158,255,0.15); }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .legend-name {
+    flex: 1; color: var(--text); font-size: 12px;
+  }
+  .legend-badge {
+    font-size: 10px; color: var(--dim);
+    background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;
+  }
+
+  /* Explainer */
+  .explainer {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    font-size: 12px;
+  }
+  .explainer strong {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 15px; font-weight: 400;
+    color: #e8f0ff; display: block; margin-bottom: 8px;
+  }
+  .explainer .highlight {
+    color: var(--gold);
+    font-weight: 400;
+  }
+  .explainer .compare {
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--border);
+    color: var(--dim); font-size: 11px;
+  }
+
+  /* Stats */
+  .stats { display: flex; flex-direction: column; gap: 6px; }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .stat-label { color: var(--dim); font-size: 11px; }
+  .stat-val { color: var(--mint); font-size: 12px; font-weight: 400; }
+
+  /* Controls */
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .control-row { display: flex; align-items: center; gap: 10px; }
+  .control-row label { color: var(--dim); font-size: 11px; width: 80px; }
+  input[type=range] {
+    flex: 1; appearance: none;
+    height: 3px; border-radius: 2px;
+    background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--pct, 50%), rgba(255,255,255,0.1) var(--pct, 50%));
+    outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    appearance: none; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--accent);
+    border: 2px solid var(--deep);
+  }
+  .val-display { color: var(--text); font-size: 11px; width: 30px; text-align: right; }
+
+  .btn {
+    padding: 8px 14px; border-radius: 5px; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    border: 1px solid; transition: all 0.2s; letter-spacing: 0.05em;
+  }
+  .btn-primary {
+    background: rgba(74,158,255,0.12); border-color: rgba(74,158,255,0.35); color: var(--accent);
+  }
+  .btn-primary:hover { background: rgba(74,158,255,0.22); }
+  .btn-ghost {
+    background: transparent; border-color: var(--border); color: var(--dim);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Animate in */
+  #panel { animation: slideIn 0.4s ease; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="stars"></div>
+
+<header>
+  <h1>Spherical Geometry Explorer</h1>
+  <span>non-euclidean space · interactive</span>
+</header>
+
+<div class="layout">
+  <div id="canvas-wrap">
+    <canvas id="gl"></canvas>
+    <div class="drag-hint">drag to rotate · scroll to zoom</div>
+  </div>
+
+  <div id="panel">
+    <!-- Tabs -->
+    <div class="section" style="padding-bottom:14px;">
+      <div class="tabs">
+        <button class="tab active" onclick="setTab('demo')">Demonstrations</button>
+        <button class="tab" onclick="setTab('learn')">Concepts</button>
+        <button class="tab" onclick="setTab('measure')">Measure</button>
+      </div>
+
+      <!-- DEMO TAB -->
+      <div id="tab-demo">
+        <div class="section-label">Choose a demonstration</div>
+        <div class="legend" id="demo-list">
+          <div class="legend-item active" onclick="selectDemo(0)">
+            <div class="dot" style="background:#4a9eff"></div>
+            <span class="legend-name">Great Circles (Lines)</span>
+            <span class="legend-badge">lines</span>
+          </div>
+          <div class="legend-item" onclick="selectDemo(1)">
+            <div class="dot" style="background:#ff6b8a"></div>
+            <span class="legend-name">No Parallel Lines</span>
+            <span class="legend-badge">parallel</span>
+          </div>
+          <div class="legend-item" onclick="selectDemo(2)">
+            <div class="dot" style="background:#e8c97a"></div>
+            <span class="legend-name">Triangle > 180°</span>
+            <span class="legend-badge">angles</span>
+          </div>
+          <div class="legend-item" onclick="selectDemo(3)">
+            <div class="dot" style="background:#5effc8"></div>
+            <span class="legend-name">Shortest Path</span>
+            <span class="legend-badge">geodesic</span>
+          </div>
+          <div class="legend-item" onclick="selectDemo(4)">
+            <div class="dot" style="background:#c084fc"></div>
+            <span class="legend-name">Poles & Equator</span>
+            <span class="legend-badge">poles</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LEARN TAB -->
+      <div id="tab-learn" style="display:none">
+        <div class="section-label">Core concepts</div>
+        <div class="explainer" id="concept-box">
+          <strong>Great Circles are Lines</strong>
+          On a sphere, the equivalent of a straight line is a <span class="highlight">great circle</span> — any circle whose center is the center of the sphere. Just as a straight line is the shortest path between two points on a flat plane, a great circle arc is the shortest path between two points on a sphere.
+          <div class="compare">Flat: straight lines extend forever in two directions<br>Sphere: great circles are finite loops — they always "come back"</div>
+        </div>
+        <div style="height:12px"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="prevConcept()">← prev</button>
+          <button class="btn btn-ghost" onclick="nextConcept()">next →</button>
+        </div>
+        <div style="margin-top:8px; color:var(--dim); font-size:10px;" id="concept-counter">1 / 5</div>
+      </div>
+
+      <!-- MEASURE TAB -->
+      <div id="tab-measure" style="display:none">
+        <div class="section-label">Current geometry</div>
+        <div class="stats" id="stats-box">
+          <div class="stat-row"><span class="stat-label">Mode</span><span class="stat-val" id="s-mode">Great Circles</span></div>
+          <div class="stat-row"><span class="stat-label">Lines shown</span><span class="stat-val" id="s-lines">3</span></div>
+          <div class="stat-row"><span class="stat-label">Intersections</span><span class="stat-val" id="s-inter">—</span></div>
+          <div class="stat-row"><span class="stat-label">Triangle sum</span><span class="stat-val" id="s-tri">—</span></div>
+          <div class="stat-row"><span class="stat-label">Excess over 180°</span><span class="stat-val" id="s-excess">—</span></div>
+        </div>
+        <div style="height:14px"></div>
+        <div class="section-label">Appearance</div>
+        <div class="controls">
+          <div class="control-row">
+            <label>Opacity</label>
+            <input type="range" min="10" max="100" value="80" id="sl-opacity" oninput="updateOpacity(this)">
+            <span class="val-display" id="v-opacity">80%</span>
+          </div>
+          <div class="control-row">
+            <label>Rotation</label>
+            <input type="range" min="0" max="1" step="0.01" value="0" id="sl-rot" oninput="setAutoRot(this)">
+            <span class="val-display" id="v-rot">off</span>
+          </div>
+        </div>
+        <div style="height:10px"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="resetCamera()">Reset View</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info card (always visible) -->
+    <div class="section" style="flex:1">
+      <div class="section-label">About this demo</div>
+      <div class="explainer" id="info-card">
+        <strong>Great Circles</strong>
+        A <span class="highlight">great circle</span> is the intersection of the sphere with a plane passing through the center. These are the "straight lines" of spherical geometry — every geodesic (shortest path) lies on one.
+        <div class="compare">There are infinitely many great circles, and every pair of distinct points lies on exactly one.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── THREE.JS SETUP ─────────────────────────────────────────────────────────
+const canvas = document.getElementById('gl');
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 0, 3.2);
+
+// Globe
+const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
+const sphereMat = new THREE.MeshPhongMaterial({
+  color: 0x0a1628, transparent: true, opacity: 0.92,
+  specular: 0x224488, shininess: 40,
+  wireframe: false
+});
+const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+scene.add(sphere);
+
+// Grid overlay (subtle latitude/longitude lines)
+const gridMat = new THREE.MeshBasicMaterial({ color: 0x1a3060, wireframe: true, transparent: true, opacity: 0.18 });
+const grid = new THREE.Mesh(new THREE.SphereGeometry(1.002, 24, 16), gridMat);
+scene.add(grid);
+
+// Glow sphere
+const glowGeo = new THREE.SphereGeometry(1.04, 32, 32);
+const glowMat = new THREE.MeshBasicMaterial({ color: 0x224488, transparent: true, opacity: 0.08, side: THREE.BackSide });
+scene.add(new THREE.Mesh(glowGeo, glowMat));
+
+// Lights
+scene.add(Object.assign(new THREE.AmbientLight(0x223355), {}));
+const dirLight = new THREE.DirectionalLight(0x88aaff, 1.2);
+dirLight.position.set(3, 4, 3);
+scene.add(dirLight);
+const rimLight = new THREE.DirectionalLight(0x4466aa, 0.5);
+rimLight.position.set(-3, -2, -2);
+scene.add(rimLight);
+
+// Line group
+const lineGroup = new THREE.Group();
+scene.add(lineGroup);
+
+// ── MATH HELPERS ─────────────────────────────────────────────────────────
+function latLonToVec(lat, lon) {
+  const phi = (90 - lat) * Math.PI / 180;
+  const theta = lon * Math.PI / 180;
+  return new THREE.Vector3(
+    Math.sin(phi) * Math.cos(theta),
+    Math.cos(phi),
+    Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+function greatCirclePoints(normal, n = 180) {
+  // Build a great circle perpendicular to `normal`
+  const pts = [];
+  const u = new THREE.Vector3().crossVectors(normal, new THREE.Vector3(0,1,0)).normalize();
+  if (u.lengthSq() < 0.01) u.set(1, 0, 0);
+  const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push(new THREE.Vector3(
+      Math.cos(a) * u.x + Math.sin(a) * v.x,
+      Math.cos(a) * u.y + Math.sin(a) * v.y,
+      Math.cos(a) * u.z + Math.sin(a) * v.z
+    ).multiplyScalar(1.012));
+  }
+  return pts;
+}
+
+function arcPoints(p1, p2, n = 100) {
+  // Geodesic arc between two points
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const v = new THREE.Vector3().lerpVectors(p1, p2, t).normalize().multiplyScalar(1.015);
+    pts.push(v);
+  }
+  return pts;
+}
+
+function makeLine(points, color, opacity = 0.85, width = 2) {
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, linewidth: width });
+  return new THREE.Line(geo, mat);
+}
+
+function makeDot(pos, color, size = 0.025) {
+  const geo = new THREE.SphereGeometry(size, 12, 12);
+  const mat = new THREE.MeshBasicMaterial({ color });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(pos.clone().multiplyScalar(1.02));
+  return m;
+}
+
+// ── DEMOS ─────────────────────────────────────────────────────────────────
+let currentDemo = 0;
+let lineOpacity = 0.8;
+
+function clearLines() {
+  while (lineGroup.children.length) lineGroup.remove(lineGroup.children[0]);
+}
+
+const demos = [
+  // 0: Great Circles
+  () => {
+    clearLines();
+    const normals = [
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(0.57, 0.57, 0.57).normalize(),
+    ];
+    const colors = [0x4a9eff, 0x7bbfff, 0xadd8ff];
+    normals.forEach((n, i) => {
+      lineGroup.add(makeLine(greatCirclePoints(n), colors[i], lineOpacity));
+    });
+    updateStats('Great Circles', 3, '—', '—', '—');
+  },
+
+  // 1: No parallel lines — two "parallel-looking" lines that MUST intersect
+  () => {
+    clearLines();
+    // On a sphere, any two great circles ALWAYS intersect at two antipodal points
+    const n1 = new THREE.Vector3(0, 1, 0.15).normalize();
+    const n2 = new THREE.Vector3(0, 1, -0.15).normalize();
+    const n3 = new THREE.Vector3(0, 1, 0.5).normalize();
+    lineGroup.add(makeLine(greatCirclePoints(n1), 0xff6b8a, lineOpacity));
+    lineGroup.add(makeLine(greatCirclePoints(n2), 0xff9eb5, lineOpacity));
+    lineGroup.add(makeLine(greatCirclePoints(n3), 0xff4466, lineOpacity));
+    // Mark the intersection points (they all pass through the same poles of the normal axis)
+    // Two lines sharing equatorial plane intersect at ±x
+    const inter1 = new THREE.Vector3(1, 0, 0).normalize();
+    const inter2 = new THREE.Vector3(-1, 0, 0).normalize();
+    lineGroup.add(makeDot(inter1, 0xffff00, 0.035));
+    lineGroup.add(makeDot(inter2, 0xffff00, 0.035));
+    // Label hint line
+    updateStats('No Parallel Lines', 3, 'Every pair meets!', '—', '—');
+  },
+
+  // 2: Spherical triangle with angles > 180°
+  () => {
+    clearLines();
+    // Triangle with vertices at north pole, (0°, 0°), (0°, 90°)
+    const A = latLonToVec(90, 0);   // north pole
+    const B = latLonToVec(0, 0);    // equator
+    const C = latLonToVec(0, 90);   // equator, 90° away
+    const sides = [
+      arcPoints(A, B), arcPoints(B, C), arcPoints(C, A)
+    ];
+    const colors = [0xe8c97a, 0xf5d97a, 0xd4b560];
+    sides.forEach((pts, i) => lineGroup.add(makeLine(pts, colors[i], lineOpacity)));
+    [A, B, C].forEach(p => lineGroup.add(makeDot(p, 0xe8c97a, 0.035)));
+    // This triangle has angles: 90° + 90° + 90° = 270°
+    updateStats('Triangle > 180°', 3, '3 vertices', '270°', '+90°');
+  },
+
+  // 3: Shortest path (geodesic) — NYC to London on globe
+  () => {
+    clearLines();
+    // NYC: 40.7°N, 74°W  London: 51.5°N, 0°W
+    const nyc = latLonToVec(40.7, -74);
+    const lon = latLonToVec(51.5, 0);
+    // "Flat map" naive route (constant latitude ~46°N)
+    const flatPts = [];
+    for (let i = 0; i <= 100; i++) {
+      const t = i / 100;
+      const lat = 40.7 + t * (51.5 - 40.7);
+      const lng = -74 + t * 74;
+      flatPts.push(latLonToVec(lat, lng).multiplyScalar(1.02));
+    }
+    // Geodesic
+    lineGroup.add(makeLine(arcPoints(nyc, lon), 0x5effc8, lineOpacity));
+    lineGroup.add(makeLine(flatPts, 0xff8844, lineOpacity * 0.7));
+    lineGroup.add(makeDot(nyc, 0x5effc8, 0.035));
+    lineGroup.add(makeDot(lon, 0x5effc8, 0.035));
+    updateStats('Shortest Path', 2, '—', '—', '—');
+  },
+
+  // 4: Poles & Equator
+  () => {
+    clearLines();
+    // Equator
+    lineGroup.add(makeLine(greatCirclePoints(new THREE.Vector3(0,1,0)), 0xc084fc, lineOpacity));
+    // Several meridians through poles
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI;
+      const n = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+      lineGroup.add(makeLine(greatCirclePoints(n), 0xa060e0, lineOpacity * 0.65));
+    }
+    // Poles
+    lineGroup.add(makeDot(new THREE.Vector3(0, 1, 0), 0xc084fc, 0.04));
+    lineGroup.add(makeDot(new THREE.Vector3(0, -1, 0), 0xc084fc, 0.04));
+    updateStats('Poles & Equator', 7, '2 poles', '—', '—');
+  }
+];
+
+const demoInfo = [
+  {
+    title: 'Great Circles',
+    text: 'A <span class="highlight">great circle</span> is the intersection of the sphere with any plane through its center. These are the "straight lines" of spherical geometry — the shortest paths between any two points always follow them.',
+    compare: 'Flat: parallel straight lines exist · Sphere: every pair of great circles intersects'
+  },
+  {
+    title: 'No Parallel Lines',
+    text: 'In Euclidean geometry, given a line and a point not on it, exactly one parallel line exists. On a sphere, <span class="highlight">no two great circles can ever be parallel</span> — they always intersect at exactly two antipodal points. (Yellow dots show the intersections.)',
+    compare: 'This violates Euclid\'s 5th postulate — the foundation of non-Euclidean geometry.'
+  },
+  {
+    title: 'Triangle Angles > 180°',
+    text: 'On a flat surface, triangle angles always sum to exactly 180°. On a sphere, they sum to <span class="highlight">more than 180°</span>. This triangle (North Pole + two equatorial points 90° apart) has three right angles: 90° + 90° + 90° = <span class="highlight">270°</span>.',
+    compare: 'The excess over 180° is proportional to the area of the triangle on the sphere.'
+  },
+  {
+    title: 'Shortest Path (Geodesic)',
+    text: 'The <span class="highlight">green arc</span> is the true shortest path from New York to London — it curves north toward Greenland. The <span class="highlight">orange path</span> at constant latitude looks straight on a flat map but is actually longer.',
+    compare: 'Airlines actually fly the green path. Flat maps distort distances dramatically.'
+  },
+  {
+    title: 'Poles & Equator',
+    text: 'The <span class="highlight">equator</span> is the great circle equidistant from both poles. All meridians (lines of longitude) pass through both poles and are great circles. They all meet at the poles — demonstrating again that no lines can be parallel.',
+    compare: 'Every meridian is perpendicular to the equator, yet they all converge.'
+  }
+];
+
+function selectDemo(i) {
+  currentDemo = i;
+  document.querySelectorAll('.legend-item').forEach((el, j) => {
+    el.classList.toggle('active', j === i);
+  });
+  demos[i]();
+  const info = demoInfo[i];
+  document.getElementById('info-card').innerHTML =
+    `<strong>${info.title}</strong>${info.text}<div class="compare">${info.compare}</div>`;
+}
+
+function updateStats(mode, lines, inter, tri, excess) {
+  document.getElementById('s-mode').textContent = mode;
+  document.getElementById('s-lines').textContent = lines;
+  document.getElementById('s-inter').textContent = inter;
+  document.getElementById('s-tri').textContent = tri;
+  document.getElementById('s-excess').textContent = excess;
+}
+
+// ── CONCEPTS ──────────────────────────────────────────────────────────────
+const concepts = [
+  {
+    title: 'Great Circles are Lines',
+    body: 'On a sphere, the equivalent of a straight line is a <span class="highlight">great circle</span> — any circle whose center is the center of the sphere. Just as a straight line is the shortest path between two points on a flat plane, a great circle arc is the shortest path on a sphere.',
+    compare: 'Flat: straight lines extend forever · Sphere: great circles are finite loops'
+  },
+  {
+    title: 'No Parallel Lines',
+    body: 'Euclid\'s 5th postulate says: given a line and external point, exactly one parallel line exists. On a sphere, this is <span class="highlight">impossible</span> — any two great circles always meet at two antipodal points. Spherical geometry has <em>no</em> parallel lines.',
+    compare: 'This single difference gives spherical geometry its unique properties.'
+  },
+  {
+    title: 'Angles in a Triangle',
+    body: 'On a flat surface, triangle angles sum to 180°. On a sphere, the sum is <span class="highlight">always greater than 180°</span>, and can be as large as 540°. The excess is proportional to the triangle\'s area on the sphere.',
+    compare: 'Small triangles: close to 180° · Huge triangles: up to 540°'
+  },
+  {
+    title: 'Geodesics (Shortest Paths)',
+    body: 'A <span class="highlight">geodesic</span> is the generalization of a straight line — the shortest curve between two points. On a sphere, all geodesics are arcs of great circles. This is why airplane routes look curved on flat maps.',
+    compare: 'NYC→London via great circle passes over Greenland — not across the Atlantic.'
+  },
+  {
+    title: 'Finite but Unbounded',
+    body: 'A sphere has <span class="highlight">finite area</span> but no edges or boundaries. You can travel indefinitely in any direction and never hit a wall — you simply return to where you started. This makes it a model of a closed, finite universe.',
+    compare: 'Flat: infinite extent · Sphere: finite area, no boundary'
+  }
+];
+let conceptIdx = 0;
+function showConcept() {
+  const c = concepts[conceptIdx];
+  document.getElementById('concept-box').innerHTML =
+    `<strong>${c.title}</strong>${c.body}<div class="compare">${c.compare}</div>`;
+  document.getElementById('concept-counter').textContent = `${conceptIdx + 1} / ${concepts.length}`;
+}
+function nextConcept() { conceptIdx = (conceptIdx + 1) % concepts.length; showConcept(); }
+function prevConcept() { conceptIdx = (conceptIdx - 1 + concepts.length) % concepts.length; showConcept(); }
+
+// ── TABS ─────────────────────────────────────────────────────────────────
+function setTab(name) {
+  ['demo','learn','measure'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', ['demo','learn','measure'][i] === name);
+  });
+}
+
+// ── CAMERA / MOUSE ───────────────────────────────────────────────────────
+let isDragging = false, lastX = 0, lastY = 0;
+let rotX = 0.3, rotY = 0;
+let autoRotSpeed = 0;
+
+wrap.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  rotY += dx * 0.01; rotX += dy * 0.01;
+  rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
+  lastX = e.clientX; lastY = e.clientY;
+});
+wrap.addEventListener('wheel', e => {
+  camera.position.z = Math.max(1.8, Math.min(5, camera.position.z + e.deltaY * 0.005));
+});
+
+// Touch
+wrap.addEventListener('touchstart', e => {
+  isDragging = true;
+  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+}, { passive: true });
+wrap.addEventListener('touchend', () => isDragging = false);
+wrap.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  const dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
+  rotY += dx * 0.01; rotX += dy * 0.01;
+  rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
+  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+}, { passive: true });
+
+function resetCamera() {
+  rotX = 0.3; rotY = 0; camera.position.z = 3.2;
+}
+
+function updateOpacity(el) {
+  lineOpacity = el.value / 100;
+  el.style.setProperty('--pct', el.value + '%');
+  document.getElementById('v-opacity').textContent = el.value + '%';
+  lineGroup.children.forEach(c => { if (c.material) c.material.opacity = lineOpacity; });
+}
+
+function setAutoRot(el) {
+  autoRotSpeed = el.value * 0.005;
+  el.style.setProperty('--pct', (el.value * 100) + '%');
+  document.getElementById('v-rot').textContent = el.value == 0 ? 'off' : (el.value * 5).toFixed(1) + 'x';
+}
+
+// ── RESIZE ───────────────────────────────────────────────────────────────
+function resize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── RENDER LOOP ──────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  if (!isDragging) rotY += autoRotSpeed;
+  sphere.rotation.x = rotX; sphere.rotation.y = rotY;
+  grid.rotation.x = rotX; grid.rotation.y = rotY;
+  lineGroup.rotation.x = rotX; lineGroup.rotation.y = rotY;
+  renderer.render(scene, camera);
+}
+animate();
+
+// Init
+selectDemo(0);
+showConcept();
+</script>
+</body>
+</html>
